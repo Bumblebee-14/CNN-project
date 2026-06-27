@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vision // CNN Classifier</title>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --bg-panel: #0f1620;
+    --cyan: #2dd4ee;
+    --cyan-dim: #1a8a9e;
+    --text: #cfe8ee;
+    --text-dim: #5d7882;
+    --border: #16313a;
+    --error: #ff5c7a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at 50% 0%, #0d1a22 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: 'Courier New', ui-monospace, monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px 80px;
+  }
+
+  .scanline-bg {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      to bottom, rgba(45, 212, 238, 0.02) 0px, rgba(45, 212, 238, 0.02) 1px,
+      transparent 1px, transparent 3px
+    );
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap { position: relative; z-index: 1; width: 100%; max-width: 640px; }
+
+  .eyebrow {
+    color: var(--cyan-dim);
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  h1 {
+    font-size: 28px;
+    letter-spacing: 0.04em;
+    margin: 0 0 6px;
+    color: #eafcff;
+    text-shadow: 0 0 18px rgba(45, 212, 238, 0.35);
+  }
+
+  h1 span { color: var(--cyan); }
+
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin-bottom: 36px;
+    line-height: 1.6;
+  }
+
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 28px;
+    position: relative;
+  }
+
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: -1px;
+    width: 18px; height: 18px;
+    border-top: 2px solid var(--cyan);
+    border-left: 2px solid var(--cyan);
+  }
+  .panel::after {
+    content: '';
+    position: absolute;
+    bottom: -1px; right: -1px;
+    width: 18px; height: 18px;
+    border-bottom: 2px solid var(--cyan);
+    border-right: 2px solid var(--cyan);
+  }
+
+  .drop-zone {
+    border: 1px dashed var(--border);
+    border-radius: 2px;
+    padding: 36px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--cyan-dim);
+    background: rgba(45, 212, 238, 0.04);
+  }
+  .drop-zone input { display: none; }
+  .drop-icon { font-size: 28px; color: var(--cyan-dim); margin-bottom: 10px; }
+  .drop-text { font-size: 13px; color: var(--text-dim); }
+  .drop-text strong { color: var(--cyan); }
+  .file-name { margin-top: 14px; font-size: 12px; color: var(--cyan); word-break: break-all; }
+
+  .submit-btn {
+    width: 100%;
+    margin-top: 20px;
+    padding: 13px;
+    background: transparent;
+    border: 1px solid var(--cyan-dim);
+    color: var(--cyan);
+    font-family: inherit;
+    font-size: 13px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+  }
+  .submit-btn:hover { background: var(--cyan); color: #04141a; }
+
+  .model-tag {
+    display: inline-block;
+    margin-top: 18px;
+    font-size: 11px;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 2px;
+    letter-spacing: 0.08em;
+  }
+  .model-tag span { color: var(--cyan-dim); }
+
+  /* Result panel */
+  .result {
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+  .result-row { display: flex; gap: 20px; align-items: flex-start; }
+  .result-row img {
+    width: 110px; height: 110px;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    filter: saturate(0.9) contrast(1.05);
+  }
+  .result-main { flex: 1; }
+  .result-label-eyebrow {
+    font-size: 10px; letter-spacing: 0.2em; color: var(--text-dim);
+    text-transform: uppercase; margin-bottom: 4px;
+  }
+  .result-label {
+    font-size: 22px; color: var(--cyan); margin-bottom: 6px;
+    text-shadow: 0 0 14px rgba(45, 212, 238, 0.3);
+  }
+  .confidence-bar-bg {
+    width: 100%; height: 6px; background: #0c1118;
+    border: 1px solid var(--border); margin-top: 8px;
+  }
+  .confidence-bar-fill {
+    height: 100%; background: var(--cyan);
+    box-shadow: 0 0 8px var(--cyan);
+  }
+  .confidence-pct { font-size: 11px; color: var(--text-dim); margin-top: 6px; }
+
+  .top3 { margin-top: 22px; }
+  .top3-title { font-size: 10px; letter-spacing: 0.15em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 10px; }
+  .top3-row {
+    display: flex; justify-content: space-between;
+    font-size: 12px; padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  .top3-row:last-child { border-bottom: none; }
+  .top3-row .val { color: var(--cyan-dim); }
+
+  .error-box {
+    margin-top: 20px;
+    color: var(--error);
+    font-size: 12px;
+    border: 1px solid rgba(255, 92, 122, 0.3);
+    padding: 12px 14px;
+    background: rgba(255, 92, 122, 0.06);
+  }
+
+  footer {
+    margin-top: 40px;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="scanline-bg"></div>
+
+<div class="wrap">
+  <div class="eyebrow">// image classification system</div>
+  <h1>VISION<span>.</span>CNN</h1>
+  <div class="subtitle">
+    Upload an image. A trained convolutional neural network will analyze
+    the pixels and return its best-guess classification with confidence
+    scores.
+  </div>
+
+  <div class="panel">
+    <form method="POST" enctype="multipart/form-data" id="uploadForm">
+      <label class="drop-zone" id="dropZone" for="fileInput">
+        <div class="drop-icon">&#9633;</div>
+        <div class="drop-text"><strong>Click to upload</strong> or drag an image here</div>
+        <div class="file-name" id="fileName"></div>
+        <input type="file" name="file" id="fileInput" accept=".png,.jpg,.jpeg,.bmp" required>
+      </label>
+      <button type="submit" class="submit-btn">Run classification</button>
+    </form>
+
+    <div class="model-tag">
+      ACTIVE MODEL: <span>{{ "FASHION-MNIST (10-class)" if model_type == "fashion" else "CATS VS DOGS (binary)" }}</span>
+    </div>
+
+    {% if result %}
+      {% if result.error %}
+        <div class="error-box">ERROR // {{ result.error }}</div>
+      {% else %}
+        <div class="result">
+          <div class="result-row">
+            {% if image_url %}<img src="{{ image_url }}" alt="uploaded image">{% endif %}
+            <div class="result-main">
+              <div class="result-label-eyebrow">Prediction</div>
+              <div class="result-label">{{ result.label }}</div>
+              <div class="confidence-bar-bg">
+                <div class="confidence-bar-fill" style="width: {{ result.confidence }}%;"></div>
+              </div>
+              <div class="confidence-pct">{{ result.confidence }}% confidence</div>
+            </div>
+          </div>
+
+          <div class="top3">
+            <div class="top3-title">Score breakdown</div>
+            {% for name, conf in result.top3 %}
+              <div class="top3-row">
+                <span>{{ name }}</span>
+                <span class="val">{{ conf }}%</span>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  <footer>Mihir Jaqtap // CNN Image Classifier</footer>
+</div>
+
+<script>
+  const fileInput = document.getElementById('fileInput');
+  const dropZone = document.getElementById('dropZone');
+  const fileName = document.getElementById('fileName');
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) fileName.textContent = fileInput.files[0].name;
+  });
+
+  ['dragenter', 'dragover'].forEach(evt =>
+    dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.add('dragover'); })
+  );
+  ['dragleave', 'drop'].forEach(evt =>
+    dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); })
+  );
+  dropZone.addEventListener('drop', (e) => {
+    if (e.dataTransfer.files.length) {
+      fileInput.files = e.dataTransfer.files;
+      fileName.textContent = e.dataTransfer.files[0].name;
+    }
+  });
+</script>
+</body>
+</html>
